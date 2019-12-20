@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.DynamoDBEvents;
@@ -11,33 +12,7 @@ namespace SearchPopulator.Lambda.PoC.Tests
     public class FunctionTests
     {
         [Fact]
-        public void TestFunction_WithNullEvent()
-        {
-            var context = new TestLambdaContext();
-            var function = new Function();
-
-            function.FunctionHandler(null, context);
-
-            var testLogger = (TestLambdaLogger)context.Logger;
-            Assert.Contains("No dynamo stream record to process", testLogger.Buffer.ToString());
-        }
-
-        [Fact]
-        public void TestFunction_WithEmptyRecordsEvent()
-        {
-            var @event = new DynamoDBEvent();
-
-            var context = new TestLambdaContext();
-            var function = new Function();
-
-            function.FunctionHandler(@event, context);
-
-            var testLogger = (TestLambdaLogger)context.Logger;
-            Assert.Contains("No dynamo stream record to process", testLogger.Buffer.ToString());
-        }
-
-        [Fact]
-        public void TestFunction_WithDynamoStreamRecord()
+        public async Task TestFunction_WithDynamoStreamRecord()
         {
             var @event = new DynamoDBEvent
             {
@@ -49,16 +24,20 @@ namespace SearchPopulator.Lambda.PoC.Tests
                         Dynamodb = new StreamRecord
                         {
                             ApproximateCreationDateTime = DateTime.Now,
-                            Keys = new Dictionary<string, AttributeValue> {{"id", new AttributeValue {S = "MyId"}}},
+                            Keys = new Dictionary<string, AttributeValue>
+                            {
+                                {"pk", new AttributeValue {S = "MyId"}},
+                                {"sk", new AttributeValue {S = "MySortKey"}}
+                            },
                             NewImage = new Dictionary<string, AttributeValue>
                             {
-                                {"field1", new AttributeValue {S = "NewValue"}},
-                                {"field2", new AttributeValue {S = "AnotherNewValue"}}
+                                {"pk", new AttributeValue {S = "NewValue"}},
+                                {"sk", new AttributeValue {S = "AnotherNewValue"}}
                             },
                             OldImage = new Dictionary<string, AttributeValue>
                             {
-                                {"field1", new AttributeValue {S = "OldValue"}},
-                                {"field2", new AttributeValue {S = "AnotherOldValue"}}
+                                {"pk", new AttributeValue {S = "OldValue"}},
+                                {"sk", new AttributeValue {S = "AnotherOldValue"}}
                             },
                             StreamViewType = StreamViewType.NEW_AND_OLD_IMAGES
                         }
@@ -69,10 +48,36 @@ namespace SearchPopulator.Lambda.PoC.Tests
             var context = new TestLambdaContext();
             var function = new Function();
 
-            function.FunctionHandler(@event, context);
+            await function.FunctionHandler(@event, context);
 
-            var testLogger = (TestLambdaLogger)context.Logger;
+            var testLogger = (TestLambdaLogger) context.Logger;
             Assert.Contains("Stream processing complete", testLogger.Buffer.ToString());
+        }
+
+        [Fact]
+        public async Task TestFunction_WithEmptyRecordsEvent()
+        {
+            var @event = new DynamoDBEvent();
+
+            var context = new TestLambdaContext();
+            var function = new Function();
+
+            await function.FunctionHandler(@event, context);
+
+            var testLogger = (TestLambdaLogger) context.Logger;
+            Assert.Contains("No dynamo stream record to process", testLogger.Buffer.ToString());
+        }
+
+        [Fact]
+        public async Task TestFunction_WithNullEvent()
+        {
+            var context = new TestLambdaContext();
+            var function = new Function();
+
+            await function.FunctionHandler(null, context);
+
+            var testLogger = (TestLambdaLogger) context.Logger;
+            Assert.Contains("No dynamo stream record to process", testLogger.Buffer.ToString());
         }
     }
 }
