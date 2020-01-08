@@ -1,10 +1,14 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Algolia.Search.Clients;
+using Algolia.Search.Models.Common;
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.DynamoDBEvents;
 using Amazon.Lambda.TestUtilities;
+using Moq;
+using SearchPopulator.Lambda.PoC.Models;
 using Xunit;
 
 namespace SearchPopulator.Lambda.PoC.Tests
@@ -14,6 +18,8 @@ namespace SearchPopulator.Lambda.PoC.Tests
         [Fact]
         public async Task TestFunction_WithDynamoStreamRecord()
         {
+            var searchIndex = new Mock<ISearchIndex>();
+
             var @event = new DynamoDBEvent
             {
                 Records = new List<DynamoDBEvent.DynamodbStreamRecord>
@@ -21,6 +27,7 @@ namespace SearchPopulator.Lambda.PoC.Tests
                     new DynamoDBEvent.DynamodbStreamRecord
                     {
                         AwsRegion = "eu-central-1",
+                        EventName = OperationType.INSERT,
                         Dynamodb = new StreamRecord
                         {
                             ApproximateCreationDateTime = DateTime.Now,
@@ -44,7 +51,6 @@ namespace SearchPopulator.Lambda.PoC.Tests
                     }
                 }
             };
-
             var context = new TestLambdaContext();
             var function = new Function();
 

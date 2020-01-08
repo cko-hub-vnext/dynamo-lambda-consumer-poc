@@ -4,7 +4,7 @@ using Newtonsoft.Json;
 
 namespace SearchPopulator.Lambda.PoC.Models
 {
-    public class AlgoliaChargeRequested : ChargeRequested
+    public class SearchableChargeRequested : ChargeRequested
     {
         [JsonProperty("objectID")] public string ObjectId { get; set; } = Guid.NewGuid().ToString();
     }
