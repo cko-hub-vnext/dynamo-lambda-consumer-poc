@@ -7,10 +7,12 @@ using System.Text;
 using System.Threading.Tasks;
 using Algolia.Search.Clients;
 using Algolia.Search.Models.Common;
+using Algolia.Search.Utils;
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using Amazon.Lambda.Core;
 using Amazon.Lambda.DynamoDBEvents;
+using Elasticsearch.Net;
 using Nest;
 using Newtonsoft.Json;
 using SearchPopulator.Lambda.PoC.Models;
@@ -38,8 +40,6 @@ namespace SearchPopulator.Lambda.PoC
                 dynamoEvent.Records.Where(x=>x.EventName.Value != "REMOVE")  /* filter for different // entities && x.Dynamodb.Keys["Type"].S == "Payment"*/
                     .SelectMany(record =>
                     {
-
-
                         var doc = Document.FromAttributeMap(record.Dynamodb.NewImage);
                         var jsonDoc = doc.ToJson();
                         var transaction = JsonConvert.DeserializeObject<Transaction>(jsonDoc);
@@ -51,7 +51,7 @@ namespace SearchPopulator.Lambda.PoC
                     }).ToList();
 
             if(!hubRecords.Any()) return;
-
+            
             var response = await ElasticSearchSaveObjects(hubRecords);
 
             var count = response.Items.Count;
@@ -61,11 +61,21 @@ namespace SearchPopulator.Lambda.PoC
 
         private static async Task<BulkResponse> ElasticSearchSaveObjects(IEnumerable<HubRecord> hubRecords)
         {
-            var conn = new ConnectionSettings(new Uri("https://search-hub-v-next-ckccgwkxaxe2z7api7hufhqkxy.eu-west-1.es.amazonaws.com")).DefaultIndex("documents_typed_ordered");
+            var conn = new ConnectionSettings(new Uri("https://search-hub-v-next-ckccgwkxaxe2z7api7hufhqkxy.eu-west-1.es.amazonaws.com")).DefaultIndex("documents_realistic");
 
             var esClient = new ElasticClient(conn);
-            var response = await esClient.IndexManyAsync(hubRecords);
 
+            var response = await esClient.BulkAsync(bd => bd
+                .IndexMany(hubRecords, (descriptor, hubRecord) =>
+                {
+                    if (hubRecord.Type != "Last") return descriptor;
+
+                    return descriptor
+                        .VersionType(VersionType.External)
+                        .Version(hubRecord.TimeStamp.ToUnixTimeSeconds());
+                }));
+
+            //skip conflict error version_conflict_engine_exception
             return response;
         }
 
@@ -106,7 +116,7 @@ namespace SearchPopulator.Lambda.PoC
 
                 var action = new HubRecord
                 {
-                    Id = GetMD5Hash($"{transaction.PaymentId.ToString()}_{transaction.ActionId.ToString()}"),
+                    Id = transaction.ActionId.ToString(),
                     Amount = transaction.Value,
                     ActionId = transaction.ActionId.ToString(),
                     Type = "Indie",
@@ -130,23 +140,6 @@ namespace SearchPopulator.Lambda.PoC
                 actionList.Add(lastAction);
 
             return actionList;
-        }
-
-        private static string GetMD5Hash(string dataToHash)
-        {
-            var sb = new StringBuilder();
-            using (MD5 md5 = MD5.Create())
-            {
-                byte[] inputBytes = System.Text.Encoding.ASCII.GetBytes(dataToHash);
-                byte[] hash = md5.ComputeHash(inputBytes);
-
-                // step 2, convert byte array to hex string
-                for (int i = 0; i < hash.Length; i++)
-                {
-                    sb.Append(hash[i].ToString("X2"));
-                }
-            }
-            return sb.ToString();
         }
     }
 }
